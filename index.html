@@ -18,6 +18,20 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
   </style>
+  <script>
+    (function () {
+      const AUTH_KEY = 'vtf_admin_logged_in';
+      const LOGIN_PAGE = 'login.html';
+      try {
+        if (sessionStorage.getItem(AUTH_KEY) !== '1') {
+          const next = encodeURIComponent(window.location.pathname.split('/').pop() || 'index.html');
+          window.location.replace(`${LOGIN_PAGE}?next=${next}`);
+        }
+      } catch (e) {
+        window.location.replace('login.html');
+      }
+    })();
+  </script>
 </head>
 <body class="bg-slate-100 text-slate-800 min-h-screen">
   <div class="max-w-[1800px] mx-auto p-4 md:p-6 space-y-4">
@@ -34,6 +48,7 @@
             <input id="fileInput" type="file" accept=".csv" class="hidden" />
           </label>
           <button id="sampleBtn" class="px-4 py-2 rounded-xl bg-slate-700 text-white font-semibold hover:bg-slate-800">Dùng dữ liệu mẫu</button>
+          <button id="logoutBtn" class="px-4 py-2 rounded-xl bg-rose-600 text-white font-semibold hover:bg-rose-700">Đăng xuất</button>
         </div>
       </div>
 
@@ -1005,9 +1020,17 @@ setInterval(() => {
       }
     }
 
+    const logoutBtn = document.getElementById('logoutBtn');
+
     els.loadRemoteBtn.addEventListener('click', () => loadFromRemote(state.sourceUrl, { silent: false, shouldDownloadFile: true }));
     els.fileInput.addEventListener('change', e => loadFromFile(e.target.files?.[0]));
     els.sampleBtn.addEventListener('click', loadSample);
+    logoutBtn?.addEventListener('click', () => {
+      if (!confirm('Bạn có chắc muốn đăng xuất không?')) return;
+      sessionStorage.removeItem('vtf_admin_logged_in');
+      sessionStorage.removeItem('vtf_admin_user');
+      window.location.replace('login.html');
+    });
     els.applyBtn.addEventListener('click', applyFilters);
     els.resetBtn.addEventListener('click', resetFilters);
     els.exportExcelBtn.addEventListener('click', exportExcel);
