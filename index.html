@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VTF Manager Pro</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    body { font-family: Arial, Helvetica, sans-serif; }
+    .sticky-head th { position: sticky; top: 0; z-index: 10; }
+    .scrollbar-thin::-webkit-scrollbar { width: 10px; height: 10px; }
+    .scrollbar-thin::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
+    .loader {
+      width: 18px; height: 18px; border: 3px solid #bfdbfe; border-top-color: #2563eb;
+      border-radius: 50%; animation: spin 1s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen">
+  <div class="max-w-[1800px] mx-auto p-4 md:p-6 space-y-4">
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 md:p-5">
+      <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h1 class="text-2xl md:text-3xl font-bold text-blue-700">Phần mềm Quản lý Taekwondo</h1>
+          <p class="text-sm text-slate-500 mt-1">Quản lý dữ liệu võ sinh, CLB, tạo danh sách thi cấp </p>
+        </div>
+        <div class="flex flex-wrap gap-2 text-sm">
+          <button id="loadRemoteBtn" class="px-4 py-2 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700">🔄 Đồng bộ dữ liệu hội viên</button>
+          <label class="px-4 py-2 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-700 cursor-pointer">
+            Nạp file CSV từ máy
+            <input id="fileInput" type="file" accept=".csv" class="hidden" />
+          </label>
+          <button id="sampleBtn" class="px-4 py-2 rounded-xl bg-slate-700 text-white font-semibold hover:bg-slate-800">Dùng dữ liệu mẫu</button>
+        </div>
+      </div>
+
+      <div class="mt-4 grid grid-cols-1 xl:grid-cols-12 gap-4">
+        <div class="xl:col-span-4 bg-slate-50 rounded-2xl border border-slate-200 p-4">
+          <h2 class="font-bold text-slate-700 mb-3">Nguồn dữ liệu</h2>
+          <div class="space-y-3 text-sm">
+            <div>
+              <label class="block font-semibold mb-1">URL CSV</label>
+              <input id="remoteUrl" class="w-full rounded-xl border border-slate-300 px-3 py-2 bg-slate-100" value="https://tungit90.info/ds_hoivien.csv" readonly />
+              <div class="text-xs text-slate-500 mt-1">Hệ thống sẽ tự động đồng bộ từ máy chủ </div>
+            </div>
+            <div class="flex gap-2 items-center text-sm">
+              <div id="statusDot" class="w-3 h-3 rounded-full bg-slate-300"></div>
+              <div id="statusText" class="text-slate-600">Chưa tải dữ liệu</div>
+            </div>
+            <div class="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
+              <div id="progressBar" class="bg-blue-600 h-3 w-0 transition-all"></div>
+            </div>
+            <div class="flex justify-between text-xs text-slate-500">
+              <span id="progressLabel">0%</span>
+              <span id="loadedCount">0 dòng</span>
+            </div>
+            <div id="loadingBox" class="hidden items-center gap-2 text-blue-700 font-semibold">
+              <div class="loader"></div><span>Đang tải dữ liệu...</span>
+            </div>
+            <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+              <div class="rounded-xl bg-white border border-slate-200 px-3 py-2">
+                <div class="text-slate-500">Lần đồng bộ gần nhất</div>
+                <div id="lastSyncText" class="font-semibold text-slate-700">Chưa đồng bộ</div>
+              </div>
+              <label class="rounded-xl bg-white border border-slate-200 px-3 py-2 flex items-center gap-2 cursor-pointer">
+                <input id="autoRefreshToggle" type="checkbox" class="accent-blue-600 hidden" />
+                <span><span class="font-semibold">Tự động làm mới</span><br><span class="text-xs text-slate-500">Mỗi 5 phút</span></span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="xl:col-span-8 grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div class="bg-blue-50 border border-blue-100 rounded-2xl p-4">
+            <div class="text-sm text-slate-500">Tổng hội viên</div>
+            <div id="statTotal" class="text-2xl font-bold text-blue-700 mt-1">0</div>
+          </div>
+          <div class="bg-emerald-50 border border-emerald-100 rounded-2xl p-4">
+            <div class="text-sm text-slate-500">CLB / Võ đường</div>
+            <div id="statClub" class="text-2xl font-bold text-emerald-700 mt-1">0</div>
+          </div>
+          <div class="bg-amber-50 border border-amber-100 rounded-2xl p-4">
+            <div class="text-sm text-slate-500">Cấp / Đẳng</div>
+            <div id="statDang" class="text-2xl font-bold text-amber-700 mt-1">0</div>
+          </div>
+          <div class="bg-violet-50 border border-violet-100 rounded-2xl p-4">
+            <div class="text-sm text-slate-500">Đang hiển thị</div>
+            <div id="statFiltered" class="text-2xl font-bold text-violet-700 mt-1">0</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 md:p-5 space-y-4">
+      <div class="flex flex-col xl:flex-row gap-4">
+        <div class="xl:w-4/12">
+          <label class="block font-semibold mb-1">Tìm nhanh</label>
+          <input id="searchText" placeholder="Mã hội viên, họ tên, ngày sinh, đơn vị..." class="w-full rounded-xl border border-slate-300 px-3 py-2" />
+        </div>
+        <div class="xl:w-2/12">
+          <label class="block font-semibold mb-1">Mã hội viên</label>
+          <input id="filterCode" placeholder="VD: V26-" class="w-full rounded-xl border border-slate-300 px-3 py-2" />
+        </div>
+        <div class="xl:w-2/12">
+          <label class="block font-semibold mb-1">Giới tính</label>
+          <select id="filterGender" class="w-full rounded-xl border border-slate-300 px-3 py-2">
+            <option value="">Tất cả</option>
+          </select>
+        </div>
+        <div class="xl:w-2/12">
+          <label class="block font-semibold mb-1">Miền</label>
+          <select id="filterRegion" class="w-full rounded-xl border border-slate-300 px-3 py-2">
+            <option value="">Tất cả</option>
+            <option value="Bac">Miền Bắc</option>
+            <option value="Trung">Miền Trung</option>
+            <option value="Nam">Miền Nam</option>
+            <option value="Khac">Khác / Chưa rõ</option>
+          </select>
+        </div>
+        <div class="xl:w-2/12">
+          <label class="block font-semibold mb-1">Tỉnh / Thành</label>
+          <select id="filterProvince" class="w-full rounded-xl border border-slate-300 px-3 py-2">
+            <option value="">Tất cả</option>
+          </select>
+        </div>
+        <div class="xl:w-2/12">
+          <label class="block font-semibold mb-1">CLB / Võ đường</label>
+          <select id="filterClub" class="w-full rounded-xl border border-slate-300 px-3 py-2">
+            <option value="">Tất cả</option>
+          </select>
+        </div>
+        <div class="xl:w-2/12">
+          <label class="block font-semibold mb-1">Cấp / Đẳng</label>
+          <select id="filterDang" class="w-full rounded-xl border border-slate-300 px-3 py-2">
+            <option value="">Tất cả</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="flex flex-col xl:flex-row gap-4 items-start xl:items-end">
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-3 w-full xl:w-auto">
+          <div>
+            <label class="block font-semibold mb-1">Năm sinh từ</label>
+            <input id="birthFrom" type="number" placeholder="2000" class="w-full rounded-xl border border-slate-300 px-3 py-2" />
+          </div>
+          <div>
+            <label class="block font-semibold mb-1">Năm sinh đến</label>
+            <input id="birthTo" type="number" placeholder="2015" class="w-full rounded-xl border border-slate-300 px-3 py-2" />
+          </div>
+          <div>
+            <label class="block font-semibold mb-1">Số dòng / trang</label>
+            <select id="pageSize" class="w-full rounded-xl border border-slate-300 px-3 py-2">
+              <option>50</option>
+              <option selected>100</option>
+              <option>200</option>
+              <option>500</option>
+              <option>1000</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-semibold mb-1">Sắp xếp</label>
+            <select id="sortBy" class="w-full rounded-xl border border-slate-300 px-3 py-2">
+              <option value="default">Mặc định</option>
+              <option value="code_asc">Mã hội viên A→Z</option>
+              <option value="code_desc">Mã hội viên Z→A</option>
+              <option value="name_asc">Họ tên A→Z</option>
+              <option value="name_desc">Họ tên Z→A</option>
+              <option value="birth_asc">Năm sinh tăng dần</option>
+              <option value="birth_desc">Năm sinh giảm dần</option>
+              <option value="club_asc">CLB A→Z</option>
+              <option value="dang_asc">Cấp/Đẳng A→Z</option>
+            </select>
+          </div>
+        </div>
+        <div class="flex flex-wrap gap-2 xl:ml-auto">
+          <button id="autoExamListBtn" class="px-4 py-2 rounded-xl bg-rose-600 text-white font-semibold hover:bg-rose-700">Tạo danh sách thi tự động</button>
+          <button id="applyBtn" class="px-4 py-2 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700">Lọc dữ liệu</button>
+          <button id="resetBtn" class="px-4 py-2 rounded-xl bg-slate-200 text-slate-800 font-semibold hover:bg-slate-300">Xóa bộ lọc</button>
+          <button id="exportExcelBtn" class="px-4 py-2 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-700">Xuất Excel</button>
+          <button id="exportCsvBtn" class="px-4 py-2 rounded-xl bg-amber-500 text-white font-semibold hover:bg-amber-600">Xuất CSV</button>
+          <button id="printBtn" class="px-4 py-2 rounded-xl bg-violet-600 text-white font-semibold hover:bg-violet-700">In danh sách</button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="rounded-2xl border border-blue-200 bg-blue-50 p-4">
+          <div class="text-sm text-slate-500">Phạm vi đang theo dõi</div>
+          <div id="activeScopeLabel" class="mt-1 text-lg font-bold text-blue-700">Toàn bộ dữ liệu</div>
+          <div id="activeScopeHint" class="mt-2 text-sm text-slate-600">Chưa áp dụng bộ lọc miền hoặc tỉnh / thành.</div>
+        </div>
+        <div class="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+          <div class="text-sm text-slate-500">Số lượng CLB theo bộ lọc</div>
+          <div id="filteredClubCount" class="mt-1 text-3xl font-bold text-emerald-700">0</div>
+          <div class="mt-2 text-sm text-slate-600">Đếm theo các CLB / võ đường khác nhau trong phạm vi đang lọc.</div>
+        </div>
+        <div class="rounded-2xl border border-violet-200 bg-violet-50 p-4">
+          <div class="text-sm text-slate-500">Số lượng võ sinh theo bộ lọc</div>
+          <div id="filteredMemberCount" class="mt-1 text-3xl font-bold text-violet-700">0</div>
+          <div class="mt-2 text-sm text-slate-600">Tổng số võ sinh hiện còn lại sau khi lọc.</div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div class="bg-slate-50 rounded-2xl border border-slate-200 p-4">
+          <div class="font-bold mb-2">Top 10 CLB / Võ đường</div>
+          <div id="topClubList" class="text-sm space-y-2 text-slate-700"></div>
+        </div>
+        <div class="bg-slate-50 rounded-2xl border border-slate-200 p-4">
+          <div class="font-bold mb-2">Top 10 Cấp / Đẳng</div>
+          <div id="topDangList" class="text-sm space-y-2 text-slate-700"></div>
+        </div>
+        <div class="bg-slate-50 rounded-2xl border border-slate-200 p-4">
+          <div class="font-bold mb-2">Ghi chú</div>
+          <ul class="text-sm text-slate-600 space-y-2 list-disc pl-5">
+            <li>File rất lớn nên lần đầu tải có thể mất thời gian.</li>
+            <li>Nên dùng Chrome 64-bit hoặc Edge mới.</li>
+            <li>Nếu máy yếu, hãy nạp file CSV từ máy và lọc theo từng đợt.</li>
+            <li>Excel chỉ nên xuất phần đang lọc để nhẹ hơn.</li>
+            <li>Khi lọc theo miền hoặc tỉnh / thành, hệ thống sẽ tự hiển thị số lượng CLB và võ sinh để bạn tiện theo dõi.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 md:p-5">
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+        <div>
+          <div class="font-bold text-lg">Danh sách hội viên</div>
+          <div class="text-sm text-slate-500">Trang <span id="pageInfo">1 / 1</span> — Hiển thị <span id="rangeInfo">0-0</span></div>
+        </div>
+        <div class="flex gap-2">
+          <button id="prevPageBtn" class="px-4 py-2 rounded-xl bg-slate-200 text-slate-800 font-semibold hover:bg-slate-300">← Trang trước</button>
+          <button id="nextPageBtn" class="px-4 py-2 rounded-xl bg-slate-200 text-slate-800 font-semibold hover:bg-slate-300">Trang sau →</button>
+        </div>
+      </div>
+
+      <div class="overflow-auto max-h-[70vh] rounded-2xl border border-slate-200 scrollbar-thin">
+        <table class="min-w-full text-sm">
+          <thead class="sticky-head bg-slate-100 text-slate-700">
+            <tr>
+              <th class="px-3 py-3 text-left border-b">STT</th>
+              <th class="px-3 py-3 text-left border-b">Mã hội viên</th>
+              <th class="px-3 py-3 text-left border-b">Họ và tên</th>
+              <th class="px-3 py-3 text-left border-b">Ngày sinh</th>
+              <th class="px-3 py-3 text-left border-b">Giới tính</th>
+              <th class="px-3 py-3 text-left border-b">Đơn vị</th>
+              <th class="px-3 py-3 text-left border-b">CLB / Võ đường</th>
+              <th class="px-3 py-3 text-left border-b">Cấp / Đẳng</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody" class="bg-white"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+<script>
+// ❌ Chặn chuột phải
+document.addEventListener("contextmenu", function(e) {
+    e.preventDefault();
+});
+
+// ❌ Chặn phím F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+U
+document.addEventListener("keydown", function(e) {
+    if (
+        e.key === "F12" ||
+        (e.ctrlKey && e.shiftKey && ["I", "J", "C"].includes(e.key)) ||
+        (e.ctrlKey && e.key === "U")
+    ) {
+        e.preventDefault();
+    }
+});
+
+// ❌ Chặn mở DevTools bằng cách phát hiện resize
+let devtoolsOpen = false;
+setInterval(() => {
+    const widthThreshold = window.outerWidth - window.innerWidth > 160;
+    const heightThreshold = window.outerHeight - window.innerHeight > 160;
+
+    if (widthThreshold || heightThreshold) {
+        if (!devtoolsOpen) {
+            devtoolsOpen = true;
+            document.body.innerHTML = "<h2 style='color:red;text-align:center'>⚠️ Truy cập bị chặn!</h2>";
+        }
+    } else {
+        devtoolsOpen = false;
+    }
+}, 1000);
+  </script>
+  <script>
+    const state = {
+      raw: [],
+      filtered: [],
+      page: 1,
+      pageSize: 100,
+      loading: false,
+      autoRefreshTimer: null,
+      sourceUrl: 'https://tkdvn1996.info/0.key/ds_hoivien.csv',
+      cacheKeyRows: 'vtf_manager_cache_rows',
+      cacheKeyTime: 'vtf_manager_cache_time',
+      cacheKeyCsv: 'vtf_manager_cache_csv_text',
+      lastSuccessfulSource: 'Chưa có',
+    };
+
+    const els = {
+      remoteUrl: document.getElementById('remoteUrl'),
+      loadRemoteBtn: document.getElementById('loadRemoteBtn'),
+      fileInput: document.getElementById('fileInput'),
+      sampleBtn: document.getElementById('sampleBtn'),
+      statusDot: document.getElementById('statusDot'),
+      statusText: document.getElementById('statusText'),
+      progressBar: document.getElementById('progressBar'),
+      progressLabel: document.getElementById('progressLabel'),
+      loadedCount: document.getElementById('loadedCount'),
+      loadingBox: document.getElementById('loadingBox'),
+      lastSyncText: document.getElementById('lastSyncText'),
+      autoRefreshToggle: document.getElementById('autoRefreshToggle'),
+      statTotal: document.getElementById('statTotal'),
+      statClub: document.getElementById('statClub'),
+      statDang: document.getElementById('statDang'),
+      statFiltered: document.getElementById('statFiltered'),
+      searchText: document.getElementById('searchText'),
+      filterCode: document.getElementById('filterCode'),
+      filterGender: document.getElementById('filterGender'),
+      filterRegion: document.getElementById('filterRegion'),
+      filterProvince: document.getElementById('filterProvince'),
+      filterClub: document.getElementById('filterClub'),
+      filterDang: document.getElementById('filterDang'),
+      birthFrom: document.getElementById('birthFrom'),
+      birthTo: document.getElementById('birthTo'),
+      pageSize: document.getElementById('pageSize'),
+      sortBy: document.getElementById('sortBy'),
+      applyBtn: document.getElementById('applyBtn'),
+      resetBtn: document.getElementById('resetBtn'),
+      exportExcelBtn: document.getElementById('exportExcelBtn'),
+      exportCsvBtn: document.getElementById('exportCsvBtn'),
+      printBtn: document.getElementById('printBtn'),
+      autoExamListBtn: document.getElementById('autoExamListBtn'),
+      topClubList: document.getElementById('topClubList'),
+      topDangList: document.getElementById('topDangList'),
+      activeScopeLabel: document.getElementById('activeScopeLabel'),
+      activeScopeHint: document.getElementById('activeScopeHint'),
+      filteredClubCount: document.getElementById('filteredClubCount'),
+      filteredMemberCount: document.getElementById('filteredMemberCount'),
+      tableBody: document.getElementById('tableBody'),
+      pageInfo: document.getElementById('pageInfo'),
+      rangeInfo: document.getElementById('rangeInfo'),
+      prevPageBtn: document.getElementById('prevPageBtn'),
+      nextPageBtn: document.getElementById('nextPageBtn'),
+    };
+
+    function formatDateTime(date = new Date()) {
+      return new Intl.DateTimeFormat('vi-VN', {
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        day: '2-digit', month: '2-digit', year: 'numeric'
+      }).format(date);
+    }
+
+    function updateLastSyncLabel(text = 'Chưa đồng bộ') {
+      els.lastSyncText.textContent = text;
+    }
+
+    function setProgress(percent, label, countText) {
+      els.progressBar.style.width = `${percent}%`;
+      els.progressLabel.textContent = `${percent}%`;
+      if (countText) els.loadedCount.textContent = countText;
+      if (label) els.statusText.textContent = label;
+    }
+
+    function saveSyncCache(rows, csvText = null) {
+      try {
+        localStorage.setItem(state.cacheKeyRows, JSON.stringify(rows || []));
+        localStorage.setItem(state.cacheKeyTime, new Date().toISOString());
+        if (typeof csvText === 'string') localStorage.setItem(state.cacheKeyCsv, csvText);
+      } catch (e) {
+        console.warn('Không lưu được cache:', e);
+      }
+    }
+
+    function loadCache() {
+      try {
+        const rows = JSON.parse(localStorage.getItem(state.cacheKeyRows) || '[]');
+        const cachedAt = localStorage.getItem(state.cacheKeyTime);
+        const csvText = localStorage.getItem(state.cacheKeyCsv);
+        return { rows, cachedAt, csvText };
+      } catch (e) {
+        return { rows: [], cachedAt: null, csvText: null };
+      }
+    }
+
+    function startAutoRefresh() {
+      if (state.autoRefreshTimer) clearInterval(state.autoRefreshTimer);
+      state.autoRefreshTimer = null;
+      return;
+    }
+
+    function setLoading(isLoading, message = 'Đang tải dữ liệu...') {
+      state.loading = isLoading;
+      els.loadingBox.classList.toggle('hidden', !isLoading);
+      els.loadingBox.classList.toggle('flex', isLoading);
+      if (isLoading) {
+        els.statusDot.className = 'w-3 h-3 rounded-full bg-blue-500 animate-pulse';
+        els.statusText.textContent = message;
+      }
+    }
+
+    function setReady(message) {
+      els.statusDot.className = 'w-3 h-3 rounded-full bg-emerald-500';
+      els.statusText.textContent = message;
+      setLoading(false);
+    }
+
+    function setWarn(message) {
+      els.statusDot.className = 'w-3 h-3 rounded-full bg-amber-500';
+      els.statusText.textContent = message;
+      setLoading(false);
+    }
+
+    function setError(message) {
+      els.statusDot.className = 'w-3 h-3 rounded-full bg-red-500';
+      els.statusText.textContent = message;
+      setLoading(false);
+    }
+
+    function normalizeRow(row) {
+      if (!row) return null;
+      const arr = Array.isArray(row) ? row : Object.values(row);
+      if (!arr.length) return null;
+      const item = {
+        stt: arr[0] ?? '',
+        code: String(arr[1] ?? '').trim(),
+        name: String(arr[2] ?? '').trim(),
+        dob: String(arr[3] ?? '').trim(),
+        gender: String(arr[4] ?? '').trim(),
+        unit: String(arr[5] ?? '').trim(),
+        club: String(arr[6] ?? '').trim(),
+        dang: String(arr[7] ?? '').trim(),
+      };
+      item.province = detectProvince(item);
+      item.region = detectRegion(item);
+      return item;
+    }
+
+    function parseBirthYear(dob) {
+      if (!dob) return null;
+      const m = String(dob).match(/(19|20)\d{2}/g);
+      if (!m || !m.length) return null;
+      return Number(m[m.length - 1]);
+    }
+
+    function normalizeText(text) {
+      return String(text ?? '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/đ/g, 'd')
+        .replace(/Đ/g, 'D')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+    }
+
+    const PROVINCES = [
+      { code: 'AGIANG', name: 'An Giang', region: 'Nam', keywords: ['an giang'] },
+      { code: 'BRVT', name: 'Bà Rịa - Vũng Tàu', region: 'Nam', keywords: ['ba ria vung tau', 'vung tau', 'br vt', 'brvt'] },
+      { code: 'BLIEU', name: 'Bạc Liêu', region: 'Nam', keywords: ['bac lieu'] },
+      { code: 'BKAN', name: 'Bắc Kạn', region: 'Bac', keywords: ['bac kan', 'bac can'] },
+      { code: 'BGIANG', name: 'Bắc Giang', region: 'Bac', keywords: ['bac giang'] },
+      { code: 'BNINH', name: 'Bắc Ninh', region: 'Bac', keywords: ['bac ninh'] },
+      { code: 'BTRE', name: 'Bến Tre', region: 'Nam', keywords: ['ben tre'] },
+      { code: 'BDINH', name: 'Bình Định', region: 'Trung', keywords: ['binh dinh'] },
+      { code: 'BDUONG', name: 'Bình Dương', region: 'Nam', keywords: ['binh duong'] },
+      { code: 'BPHUOC', name: 'Bình Phước', region: 'Nam', keywords: ['binh phuoc'] },
+      { code: 'BTHUAN', name: 'Bình Thuận', region: 'Trung', keywords: ['binh thuan'] },
+      { code: 'CMAU', name: 'Cà Mau', region: 'Nam', keywords: ['ca mau'] },
+      { code: 'CTHO', name: 'Cần Thơ', region: 'Nam', keywords: ['can tho'] },
+      { code: 'CBANG', name: 'Cao Bằng', region: 'Bac', keywords: ['cao bang'] },
+      { code: 'DANANG', name: 'Đà Nẵng', region: 'Trung', keywords: ['da nang', 'danang'] },
+      { code: 'DLAK', name: 'Đắk Lắk', region: 'Trung', keywords: ['dak lak', 'dac lac', 'd lak'] },
+      { code: 'DNONG', name: 'Đắk Nông', region: 'Trung', keywords: ['dak nong', 'dac nong'] },
+      { code: 'DBIEN', name: 'Điện Biên', region: 'Bac', keywords: ['dien bien'] },
+      { code: 'DNAI', name: 'Đồng Nai', region: 'Nam', keywords: ['dong nai'] },
+      { code: 'DTHAP', name: 'Đồng Tháp', region: 'Nam', keywords: ['dong thap'] },
+      { code: 'GLAI', name: 'Gia Lai', region: 'Trung', keywords: ['gia lai'] },
+      { code: 'HGIANG', name: 'Hà Giang', region: 'Bac', keywords: ['ha giang'] },
+      { code: 'HNAM', name: 'Hà Nam', region: 'Bac', keywords: ['ha nam'] },
+      { code: 'HNOI', name: 'Hà Nội', region: 'Bac', keywords: ['ha noi', 'hanoi', 'hnoi'] },
+      { code: 'HTINH', name: 'Hà Tĩnh', region: 'Trung', keywords: ['ha tinh'] },
+      { code: 'HDUONG', name: 'Hải Dương', region: 'Bac', keywords: ['hai duong'] },
+      { code: 'HPHONG', name: 'Hải Phòng', region: 'Bac', keywords: ['hai phong', 'haiphong'] },
+      { code: 'HGIANG2', name: 'Hậu Giang', region: 'Nam', keywords: ['hau giang'] },
+      { code: 'HBINH', name: 'Hòa Bình', region: 'Bac', keywords: ['hoa binh'] },
+      { code: 'HYEN', name: 'Hưng Yên', region: 'Bac', keywords: ['hung yen'] },
+      { code: 'KHGIANG', name: 'Kiên Giang', region: 'Nam', keywords: ['kien giang'] },
+      { code: 'KTUM', name: 'Kon Tum', region: 'Trung', keywords: ['kon tum', 'kontum'] },
+      { code: 'KHOA', name: 'Khánh Hòa', region: 'Trung', keywords: ['khanh hoa'] },
+      { code: 'LCHAU', name: 'Lai Châu', region: 'Bac', keywords: ['lai chau'] },
+      { code: 'LDONG', name: 'Lâm Đồng', region: 'Trung', keywords: ['lam dong'] },
+      { code: 'LSON', name: 'Lạng Sơn', region: 'Bac', keywords: ['lang son'] },
+      { code: 'LCAI', name: 'Lào Cai', region: 'Bac', keywords: ['lao cai'] },
+      { code: 'LAN', name: 'Long An', region: 'Nam', keywords: ['long an'] },
+      { code: 'NDINH', name: 'Nam Định', region: 'Bac', keywords: ['nam dinh'] },
+      { code: 'NAN', name: 'Nghệ An', region: 'Trung', keywords: ['nghe an'] },
+      { code: 'NBINH', name: 'Ninh Bình', region: 'Bac', keywords: ['ninh binh'] },
+      { code: 'NTHUAN', name: 'Ninh Thuận', region: 'Trung', keywords: ['ninh thuan'] },
+      { code: 'PTHO', name: 'Phú Thọ', region: 'Bac', keywords: ['phu tho'] },
+      { code: 'PYEN', name: 'Phú Yên', region: 'Trung', keywords: ['phu yen'] },
+      { code: 'QBINH', name: 'Quảng Bình', region: 'Trung', keywords: ['quang binh'] },
+      { code: 'QNAM', name: 'Quảng Nam', region: 'Trung', keywords: ['quang nam'] },
+      { code: 'NINH', name: 'Quảng Ninh', region: 'Bac', keywords: ['quang ninh'] },
+      { code: 'QNGAI', name: 'Quảng Ngãi', region: 'Trung', keywords: ['quang ngai'] },
+      { code: 'QTRI', name: 'Quảng Trị', region: 'Trung', keywords: ['quang tri'] },
+      { code: 'STRANG', name: 'Sóc Trăng', region: 'Nam', keywords: ['soc trang'] },
+      { code: 'SLA', name: 'Sơn La', region: 'Bac', keywords: ['son la'] },
+      { code: 'TNINH', name: 'Tây Ninh', region: 'Nam', keywords: ['tay ninh'] },
+      { code: 'TBINH', name: 'Thái Bình', region: 'Bac', keywords: ['thai binh'] },
+      { code: 'TNGUYEN', name: 'Thái Nguyên', region: 'Bac', keywords: ['thai nguyen'] },
+      { code: 'THOA', name: 'Thanh Hóa', region: 'Trung', keywords: ['thanh hoa'] },
+      { code: 'TTHUE', name: 'Thừa Thiên Huế', region: 'Trung', keywords: ['thua thien hue', 'hue'] },
+      { code: 'TGIANG', name: 'Tiền Giang', region: 'Nam', keywords: ['tien giang'] },
+      { code: 'TPHCM', name: 'TP. Hồ Chí Minh', region: 'Nam', keywords: ['ho chi minh', 'tp hcm', 'tphcm', 'sai gon', 'tp ho chi minh', 'hcm'] },
+      { code: 'TVINH', name: 'Trà Vinh', region: 'Nam', keywords: ['tra vinh'] },
+      { code: 'TQUANG', name: 'Tuyên Quang', region: 'Bac', keywords: ['tuyen quang'] },
+      { code: 'VINHLONG', name: 'Vĩnh Long', region: 'Nam', keywords: ['vinh long'] },
+      { code: 'VPHUC', name: 'Vĩnh Phúc', region: 'Bac', keywords: ['vinh phuc'] },
+      { code: 'YBAI', name: 'Yên Bái', region: 'Bac', keywords: ['yen bai'] }
+    ];
+
+    const PROVINCE_LABELS = new Map(PROVINCES.map(p => [p.code, `${p.name} (${p.code})`]));
+
+    const REGION_KEYWORDS = {
+      Bac: PROVINCES.filter(p => p.region === 'Bac').flatMap(p => p.keywords),
+      Trung: PROVINCES.filter(p => p.region === 'Trung').flatMap(p => p.keywords),
+      Nam: PROVINCES.filter(p => p.region === 'Nam').flatMap(p => p.keywords)
+    };
+
+    function detectProvince(item) {
+      const haystack = normalizeText([item.unit, item.club, item.code].join(' '));
+      if (!haystack) return '';
+      const found = PROVINCES.find(p => p.keywords.some(k => haystack.includes(normalizeText(k))));
+      return found ? found.code : '';
+    }
+
+    function getProvinceLabel(code) {
+      return PROVINCE_LABELS.get(code) || 'Chưa rõ';
+    }
+
+    function detectRegion(item) {
+      if (item.province) {
+        const province = PROVINCES.find(p => p.code === item.province);
+        if (province) return province.region;
+      }
+      const haystack = normalizeText([item.unit, item.club, item.code].join(' '));
+      if (!haystack) return 'Khac';
+      if (REGION_KEYWORDS.Bac.some(k => haystack.includes(k))) return 'Bac';
+      if (REGION_KEYWORDS.Trung.some(k => haystack.includes(k))) return 'Trung';
+      if (REGION_KEYWORDS.Nam.some(k => haystack.includes(k))) return 'Nam';
+      return 'Khac';
+    }
+
+    function escapeHtml(text) {
+      return String(text ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+    }
+
+    function countMap(items, key) {
+      const map = new Map();
+      items.forEach(item => {
+        const value = (item[key] || 'Chưa rõ').trim() || 'Chưa rõ';
+        map.set(value, (map.get(value) || 0) + 1);
+      });
+      return [...map.entries()].sort((a,b) => b[1] - a[1]);
+    }
+
+    function fillSelect(selectEl, values, keepFirst = true) {
+      const first = keepFirst ? '<option value="">Tất cả</option>' : '';
+      selectEl.innerHTML = first + values.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
+    }
+
+    function refreshClubOptions() {
+      const currentProvinceLabel = els.filterProvince.value;
+      const currentProvince = [...PROVINCE_LABELS.entries()].find(([, label]) => label === currentProvinceLabel)?.[0] || '';
+      const currentRegion = els.filterRegion.value;
+      const currentClub = els.filterClub.value;
+
+      let rows = [...state.raw];
+      if (currentRegion) rows = rows.filter(x => x.region === currentRegion);
+      if (currentProvince) rows = rows.filter(x => x.province === currentProvince);
+
+      const clubs = [...new Set(rows.map(x => x.club).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi'));
+      fillSelect(els.filterClub, clubs);
+
+      if (currentClub && clubs.includes(currentClub)) {
+        els.filterClub.value = currentClub;
+      } else {
+        els.filterClub.value = '';
+      }
+    }
+
+    function getFilteredScopeMeta() {
+      const regionLabelMap = {
+        Bac: 'Miền Bắc',
+        Trung: 'Miền Trung',
+        Nam: 'Miền Nam',
+        Khac: 'Khác / Chưa rõ'
+      };
+      const region = els.filterRegion.value;
+      const provinceLabel = els.filterProvince.value;
+      const club = els.filterClub.value;
+
+      let label = 'Toàn bộ dữ liệu';
+      let hint = 'Chưa áp dụng bộ lọc miền hoặc tỉnh / thành.';
+
+      if (region && provinceLabel) {
+        label = `${provinceLabel} • ${regionLabelMap[region] || region}`;
+        hint = 'Đang thống kê trong phạm vi tỉnh / thành đã chọn.';
+      } else if (provinceLabel) {
+        label = provinceLabel;
+        hint = 'Đang thống kê toàn bộ CLB và võ sinh của tỉnh / thành này.';
+      } else if (region) {
+        label = regionLabelMap[region] || region;
+        hint = 'Đang thống kê toàn bộ CLB và võ sinh của miền này.';
+      }
+
+      if (club) {
+        hint = `Đã thu hẹp thêm theo CLB: ${club}.`;
+      }
+
+      return { label, hint };
+    }
+
+    function refreshStats() {
+      const clubs = new Set(state.raw.map(x => x.club).filter(Boolean));
+      const dangs = new Set(state.raw.map(x => x.dang).filter(Boolean));
+      const filteredClubCount = new Set(state.filtered.map(x => x.club).filter(Boolean)).size;
+      const scopeMeta = getFilteredScopeMeta();
+      els.statTotal.textContent = state.raw.length.toLocaleString('vi-VN');
+      els.statClub.textContent = clubs.size.toLocaleString('vi-VN');
+      els.statDang.textContent = dangs.size.toLocaleString('vi-VN');
+      els.statFiltered.textContent = state.filtered.length.toLocaleString('vi-VN');
+      els.activeScopeLabel.textContent = scopeMeta.label;
+      els.activeScopeHint.textContent = scopeMeta.hint;
+      els.filteredClubCount.textContent = filteredClubCount.toLocaleString('vi-VN');
+      els.filteredMemberCount.textContent = state.filtered.length.toLocaleString('vi-VN');
+
+      const genders = [...new Set(state.raw.map(x => x.gender).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi'));
+      const provinces = [...new Set(state.raw.map(x => x.province).filter(Boolean))]
+        .sort((a,b) => getProvinceLabel(a).localeCompare(getProvinceLabel(b), 'vi'));
+
+      fillSelect(els.filterGender, genders);
+      fillSelect(els.filterProvince, provinces.map(getProvinceLabel));
+      if (els.filterProvince.dataset.codeMap !== 'ready') {
+        // no-op, select uses visible label and we map back immediately below
+      }
+      const currentProvinceCode = els.filterProvince.getAttribute('data-current-code');
+      if (currentProvinceCode && provinces.includes(currentProvinceCode)) {
+        els.filterProvince.value = getProvinceLabel(currentProvinceCode);
+      }
+      fillSelect(els.filterDang, [...dangs].sort((a,b)=>a.localeCompare(b,'vi')));
+      refreshClubOptions();
+
+      const topClub = countMap(state.filtered.length ? state.filtered : state.raw, 'club').slice(0,10);
+      const topDang = countMap(state.filtered.length ? state.filtered : state.raw, 'dang').slice(0,10);
+
+      els.topClubList.innerHTML = topClub.length ? topClub.map(([name, count], i) => `
+        <div class="flex justify-between gap-3"><span>${i+1}. ${escapeHtml(name)}</span><span class="font-bold text-blue-700">${count.toLocaleString('vi-VN')}</span></div>
+      `).join('') : '<div class="text-slate-400">Chưa có dữ liệu</div>';
+
+      els.topDangList.innerHTML = topDang.length ? topDang.map(([name, count], i) => `
+        <div class="flex justify-between gap-3"><span>${i+1}. ${escapeHtml(name)}</span><span class="font-bold text-amber-700">${count.toLocaleString('vi-VN')}</span></div>
+      `).join('') : '<div class="text-slate-400">Chưa có dữ liệu</div>';
+    }
+
+    function applyFilters() {
+      const q = els.searchText.value.trim().toUpperCase();
+      const code = els.filterCode.value.trim().toUpperCase();
+      const gender = els.filterGender.value;
+      const region = els.filterRegion.value;
+      const provinceLabel = els.filterProvince.value;
+      const province = [...PROVINCE_LABELS.entries()].find(([, label]) => label === provinceLabel)?.[0] || '';
+      const club = els.filterClub.value;
+      const dang = els.filterDang.value;
+      const birthFrom = Number(els.birthFrom.value || 0);
+      const birthTo = Number(els.birthTo.value || 0);
+      const sortBy = els.sortBy.value;
+
+      let list = state.raw.filter(item => {
+        const haystack = [item.code, item.name, item.dob, item.gender, item.unit, item.club, item.dang].join(' | ').toUpperCase();
+        const year = parseBirthYear(item.dob);
+        if (q && !haystack.includes(q)) return false;
+        if (code && !item.code.toUpperCase().includes(code)) return false;
+        if (gender && item.gender !== gender) return false;
+        if (region && item.region !== region) return false;
+        if (province && item.province !== province) return false;
+        if (club && item.club !== club) return false;
+        if (dang && item.dang !== dang) return false;
+        if (birthFrom && (!year || year < birthFrom)) return false;
+        if (birthTo && (!year || year > birthTo)) return false;
+        return true;
+      });
+
+      if (sortBy !== 'default') {
+        list.sort((a, b) => {
+          switch (sortBy) {
+            case 'code_asc': return a.code.localeCompare(b.code, 'vi');
+            case 'code_desc': return b.code.localeCompare(a.code, 'vi');
+            case 'name_asc': return a.name.localeCompare(b.name, 'vi');
+            case 'name_desc': return b.name.localeCompare(a.name, 'vi');
+            case 'birth_asc': return (parseBirthYear(a.dob) || 0) - (parseBirthYear(b.dob) || 0);
+            case 'birth_desc': return (parseBirthYear(b.dob) || 0) - (parseBirthYear(a.dob) || 0);
+            case 'club_asc': return a.club.localeCompare(b.club, 'vi');
+            case 'dang_asc': return a.dang.localeCompare(b.dang, 'vi');
+            default: return 0;
+          }
+        });
+      }
+
+      state.filtered = list;
+      state.page = 1;
+      refreshStats();
+      renderTable();
+    }
+
+    function renderTable() {
+      state.pageSize = Number(els.pageSize.value || 100);
+      const total = state.filtered.length;
+      const totalPages = Math.max(1, Math.ceil(total / state.pageSize));
+      if (state.page > totalPages) state.page = totalPages;
+      const start = (state.page - 1) * state.pageSize;
+      const end = Math.min(start + state.pageSize, total);
+      const pageRows = state.filtered.slice(start, end);
+
+      els.pageInfo.textContent = `${state.page} / ${totalPages}`;
+      els.rangeInfo.textContent = total ? `${start + 1}-${end}` : '0-0';
+      els.prevPageBtn.disabled = state.page <= 1;
+      els.nextPageBtn.disabled = state.page >= totalPages;
+      els.prevPageBtn.classList.toggle('opacity-50', state.page <= 1);
+      els.nextPageBtn.classList.toggle('opacity-50', state.page >= totalPages);
+
+      if (!pageRows.length) {
+        els.tableBody.innerHTML = '<tr><td colspan="8" class="px-4 py-10 text-center text-slate-400">Không có dữ liệu phù hợp</td></tr>';
+        return;
+      }
+
+      els.tableBody.innerHTML = pageRows.map((row, idx) => `
+        <tr class="hover:bg-slate-50 border-b border-slate-100">
+          <td class="px-3 py-3">${start + idx + 1}</td>
+          <td class="px-3 py-3 font-semibold text-blue-700">${escapeHtml(row.code)}</td>
+          <td class="px-3 py-3 font-semibold">${escapeHtml(row.name)}</td>
+          <td class="px-3 py-3">${escapeHtml(row.dob)}</td>
+          <td class="px-3 py-3">${escapeHtml(row.gender)}</td>
+          <td class="px-3 py-3">${escapeHtml(row.unit)}</td>
+          <td class="px-3 py-3">${escapeHtml(row.club)}</td>
+          <td class="px-3 py-3"><span class="px-2 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-700 font-semibold">${escapeHtml(row.dang || 'Chưa rõ')}</span></td>
+        </tr>
+      `).join('');
+    }
+
+    function exportExcel() {
+      if (!state.filtered.length) return alert('Không có dữ liệu để xuất.');
+      const data = state.filtered.map((r, i) => ({
+        STT: i + 1,
+        'Mã hội viên': r.code,
+        'Họ và tên': r.name,
+        'Ngày sinh': r.dob,
+        'Giới tính': r.gender,
+        'Đơn vị': r.unit,
+        'CLB / Võ đường': r.club,
+        'Cấp / Đẳng': r.dang,
+      }));
+      const ws = XLSX.utils.json_to_sheet(data);
+      ws['!cols'] = [{wch:6},{wch:18},{wch:28},{wch:14},{wch:12},{wch:28},{wch:28},{wch:14}];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'HoiVien');
+      XLSX.writeFile(wb, `VTF_Manager_${new Date().toISOString().slice(0,10)}.xlsx`);
+    }
+
+    function exportCSV() {
+      if (!state.filtered.length) return alert('Không có dữ liệu để xuất.');
+      const rows = [['STT','Mã hội viên','Họ và tên','Ngày sinh','Giới tính','Đơn vị','CLB / Võ đường','Cấp / Đẳng']];
+      state.filtered.forEach((r, i) => rows.push([i+1, r.code, r.name, r.dob, r.gender, r.unit, r.club, r.dang]));
+      const csv = Papa.unparse(rows);
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `VTF_Manager_${new Date().toISOString().slice(0,10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
+    function printTable() {
+      if (!state.filtered.length) return alert('Không có dữ liệu để in.');
+      const html = `
+        <html><head><title>In danh sách hội viên</title>
+        <style>
+          body{font-family:Arial;padding:20px;color:#111}
+          h2{text-align:center;margin-bottom:10px}
+          table{width:100%;border-collapse:collapse;font-size:12px}
+          th,td{border:1px solid #333;padding:6px;text-align:left}
+          th{background:#eee}
+        </style></head><body>
+        <h2>DANH SÁCH HỘI VIÊN</h2>
+        <table>
+          <thead><tr><th>STT</th><th>Mã hội viên</th><th>Họ và tên</th><th>Ngày sinh</th><th>Giới tính</th><th>Đơn vị</th><th>CLB / Võ đường</th><th>Cấp / Đẳng</th></tr></thead>
+          <tbody>
+            ${state.filtered.map((r,i)=>`<tr><td>${i+1}</td><td>${escapeHtml(r.code)}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.dob)}</td><td>${escapeHtml(r.gender)}</td><td>${escapeHtml(r.unit)}</td><td>${escapeHtml(r.club)}</td><td>${escapeHtml(r.dang)}</td></tr>`).join('')}
+          </tbody>
+        </table></body></html>`;
+      const w = window.open('', '_blank');
+      w.document.write(html);
+      w.document.close();
+      w.focus();
+      w.print();
+    }
+
+    function resetFilters() {
+      els.searchText.value = '';
+      els.filterCode.value = '';
+      els.filterGender.value = '';
+      els.filterRegion.value = '';
+      els.filterProvince.value = '';
+      els.filterProvince.setAttribute('data-current-code', '');
+      els.filterClub.value = '';
+      els.filterDang.value = '';
+      els.birthFrom.value = '';
+      els.birthTo.value = '';
+      els.sortBy.value = 'default';
+      state.filtered = [...state.raw];
+      state.page = 1;
+      refreshStats();
+      renderTable();
+    }
+
+    function ingestRows(rows, meta = {}) {
+      if (!rows || !rows.length) {
+        setError('Không đọc được dữ liệu.');
+        return false;
+      }
+      const normalized = rows.map(normalizeRow).filter(r => r && (r.code || r.name));
+      if (!normalized.length) {
+        setError('Dữ liệu trống hoặc sai định dạng.');
+        return false;
+      }
+      const first = normalized[0];
+      if (String(first.code).toLowerCase().includes('mã') || String(first.name).toLowerCase().includes('họ')) {
+        normalized.shift();
+      }
+      state.raw = normalized;
+      state.filtered = [...normalized];
+      els.filterProvince.setAttribute('data-current-code', '');
+      saveSyncCache(rows, meta.csvText ?? null);
+      state.page = 1;
+      setProgress(100, '', `${state.raw.length.toLocaleString('vi-VN')} dòng`);
+      refreshStats();
+      renderTable();
+      return true;
+    }
+
+    function parseCsvText(csvText) {
+      return new Promise((resolve, reject) => {
+        Papa.parse(csvText, {
+          skipEmptyLines: true,
+          complete: results => resolve(results.data || []),
+          error: err => reject(err),
+        });
+      });
+    }
+
+    function downloadBlobToMachine(content, fileName = 'ds_hoivien.csv', mime = 'text/csv;charset=utf-8;') {
+      const blob = new Blob([content], { type: mime });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(a.href), 1200);
+    }
+
+    function triggerDirectDownload(url) {
+      const iframe = document.createElement('iframe');
+      iframe.style.display = 'none';
+      iframe.src = url + (url.includes('?') ? '&' : '?') + '_dl=' + Date.now();
+      document.body.appendChild(iframe);
+      setTimeout(() => iframe.remove(), 15000);
+    }
+
+    async function fetchCsvTextWithFallbacks(url) {
+      const targets = [
+        { label: 'máy chủ gốc', url },
+        { label: 'proxy AllOrigins', url: 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url) },
+        { label: 'proxy isomorphic-git', url: 'https://cors.isomorphic-git.org/' + url },
+      ];
+      const errors = [];
+      for (const target of targets) {
+        try {
+          const response = await fetch(target.url, { cache: 'no-store' });
+          if (!response.ok) throw new Error('HTTP ' + response.status);
+          const text = await response.text();
+          if (!text || text.trim().length < 10) throw new Error('Dữ liệu rỗng');
+          state.lastSuccessfulSource = target.label;
+          return text;
+        } catch (err) {
+          errors.push(`${target.label}: ${err.message || err}`);
+        }
+      }
+      throw new Error(errors.join(' | '));
+    }
+
+    async function loadFromRemote(url = state.sourceUrl, options = {}) {
+      const { silent = false, shouldDownloadFile = false } = options;
+      if (!url) return alert('Vui lòng nhập URL CSV.');
+      state.sourceUrl = url;
+      setLoading(true, silent ? 'Đang tự động đồng bộ dữ liệu...' : (shouldDownloadFile ? 'Đang tải file CSV về máy và đồng bộ...' : 'Đang tải CSV online...'));
+      setProgress(8, '', 'Đang kết nối...');
+      if (!silent) updateLastSyncLabel('Đang đồng bộ...');
+
+      try {
+        if (shouldDownloadFile) {
+          triggerDirectDownload(url);
+        }
+
+        setProgress(28, '', 'Đang lấy dữ liệu từ máy chủ...');
+        const csvText = await fetchCsvTextWithFallbacks(url);
+
+        setProgress(62, '', shouldDownloadFile ? 'Đang lưu bản sao về máy...' : 'Đang xử lý dữ liệu...');
+        if (shouldDownloadFile) {
+          downloadBlobToMachine(csvText, 'ds_hoivien.csv');
+        }
+
+        const rows = await parseCsvText(csvText);
+        const ok = ingestRows(rows, { csvText });
+        if (!ok) return;
+
+        const nowText = formatDateTime();
+        updateLastSyncLabel(`Đồng bộ: ${nowText}`);
+        if (shouldDownloadFile) {
+          setReady(`Đã tải file về máy và đồng bộ thành công (${state.lastSuccessfulSource})`);
+        } else {
+          setReady(`Đồng bộ dữ liệu thành công (${state.lastSuccessfulSource})`);
+        }
+      } catch (err) {
+        const cache = loadCache();
+        if (cache.csvText) {
+          try {
+            const rows = await parseCsvText(cache.csvText);
+            const ok = ingestRows(rows, { csvText: cache.csvText });
+            if (ok) {
+              const cacheText = cache.cachedAt ? formatDateTime(new Date(cache.cachedAt)) : 'không rõ thời gian';
+              updateLastSyncLabel(`Cache: ${cacheText}`);
+              setWarn('Không tải được online, hệ thống đang dùng dữ liệu cache gần nhất');
+              return;
+            }
+          } catch (_) {}
+        }
+        if (cache.rows && cache.rows.length) {
+          const ok = ingestRows(cache.rows);
+          if (ok) {
+            const cacheText = cache.cachedAt ? formatDateTime(new Date(cache.cachedAt)) : 'không rõ thời gian';
+            updateLastSyncLabel(`Cache: ${cacheText}`);
+            setWarn('Không tải được online, hệ thống đang dùng dữ liệu cache gần nhất');
+            return;
+          }
+        }
+        setError('Lỗi tải CSV online: ' + (err?.message || 'Không xác định'));
+      }
+    }
+
+    function loadFromFile(file) {
+      if (!file) return;
+      setLoading(true, `Đang đọc file ${file.name}...`);
+      setProgress(20, '', 'Đang đọc file...');
+      Papa.parse(file, {
+        worker: true,
+        skipEmptyLines: true,
+        complete: function(results) {
+          const ok = ingestRows(results.data);
+          if (ok) {
+            updateLastSyncLabel('Nạp từ máy: ' + formatDateTime());
+            setReady(`Đã nạp file ${file.name}`);
+          }
+        },
+        error: function(err) {
+          setError('Lỗi đọc file: ' + (err?.message || 'Không xác định'));
+        }
+      });
+    }
+
+    function loadSample() {
+      const sample = [
+        [1,'V26-000001','NGUYỄN VĂN A','01/01/2010','Nam','Hà Nội','CLB Ba Đình','Đai đen 1 đẳng'],
+        [2,'V26-000002','TRẦN THỊ B','12/06/2011','Nữ','Hà Nội','CLB Ba Đình','Đai đỏ'],
+        [3,'V25-123456','LÊ VĂN C','21/08/2008','Nam','Đà Nẵng','CLB Hải Châu','Đai đen 2 đẳng'],
+        [4,'V24-778899','PHẠM THỊ D','09/09/2012','Nữ','TP.HCM','CLB Quận 1','Đai xanh'],
+      ];
+      const ok = ingestRows(sample);
+      if (ok) {
+        updateLastSyncLabel('Dữ liệu mẫu: ' + formatDateTime());
+        setWarn('Đang dùng dữ liệu mẫu tạm thời');
+      }
+    }
+
+    els.loadRemoteBtn.addEventListener('click', () => loadFromRemote(state.sourceUrl, { silent: false, shouldDownloadFile: true }));
+    els.fileInput.addEventListener('change', e => loadFromFile(e.target.files?.[0]));
+    els.sampleBtn.addEventListener('click', loadSample);
+    els.applyBtn.addEventListener('click', applyFilters);
+    els.resetBtn.addEventListener('click', resetFilters);
+    els.exportExcelBtn.addEventListener('click', exportExcel);
+    els.exportCsvBtn.addEventListener('click', exportCSV);
+    els.printBtn.addEventListener('click', printTable);
+    els.autoExamListBtn.addEventListener('click', () => {
+      window.location.href = 'ghepfile.html';
+    });
+    els.pageSize.addEventListener('change', renderTable);
+    els.prevPageBtn.addEventListener('click', () => { if (state.page > 1) { state.page--; renderTable(); } });
+    els.nextPageBtn.addEventListener('click', () => {
+      const totalPages = Math.max(1, Math.ceil(state.filtered.length / Number(els.pageSize.value || 100)));
+      if (state.page < totalPages) { state.page++; renderTable(); }
+    });
+
+    [els.searchText, els.filterCode, els.filterGender, els.filterClub, els.filterDang, els.birthFrom, els.birthTo, els.sortBy].forEach(el => {
+      el.addEventListener('keydown', e => { if (e.key === 'Enter') applyFilters(); });
+      if (el.tagName === 'SELECT') el.addEventListener('change', applyFilters);
+    });
+
+    els.filterRegion.addEventListener('change', () => {
+      refreshClubOptions();
+      applyFilters();
+    });
+
+    els.filterProvince.addEventListener('change', () => {
+      const selectedLabel = els.filterProvince.value;
+      const selectedCode = [...PROVINCE_LABELS.entries()].find(([, label]) => label === selectedLabel)?.[0] || '';
+      els.filterProvince.setAttribute('data-current-code', selectedCode);
+      refreshClubOptions();
+      applyFilters();
+    });
+
+    els.autoRefreshToggle.addEventListener('change', startAutoRefresh);
+
+    const cache = loadCache();
+    if (cache.csvText || (cache.rows && cache.rows.length)) {
+      updateLastSyncLabel('Chưa nạp dữ liệu');
+      setReady('Sẵn sàng. Hãy bấm Tải dữ liệu online, chọn file CSV/Excel hoặc dùng dữ liệu mẫu khi cần.');
+    } else {
+      updateLastSyncLabel('Chưa nạp dữ liệu');
+      setReady('Sẵn sàng. Hãy bấm Tải dữ liệu online, chọn file CSV/Excel hoặc dùng dữ liệu mẫu khi cần.');
+    }
+
+    startAutoRefresh();
+  </script>
+</body>
+</html>
